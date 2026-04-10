@@ -1,0 +1,38 @@
+{
+  "language": "ja",
+  "hocotate_path": "C:/Users/higa/Desktop/rnd_model/Hocotate_Toolkit_v1.12a/Hocotate_Toolkit.exe",
+  "variants": 1,
+  "seed": 42,
+  "hide_cmd": true,
+  "select_one": true,
+  "scale_ranges": {
+    "head": [
+      0.75,
+      1.4
+    ],
+    "leaf": [
+      0.6,
+      1.6
+    ],
+    "body": [
+      0.8,
+      1.25
+    ],
+    "leg": [
+      0.7,
+      1.4
+    ],
+    "legcentre": [
+      0.85,
+      1.15
+    ],
+    "arm": [
+      0.7,
+      1.4
+    ],
+    "eye": [
+      0.8,
+      1.3
+    ]
+  }
+}
