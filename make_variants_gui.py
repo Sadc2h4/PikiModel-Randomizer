@@ -35,6 +35,10 @@ HOCOTATE_URL = 'https://github.com/Sadc2h4/Hocotate-Tool-Kit'
 # Windows でコンソール非表示にするフラグ
 CREATE_NO_WINDOW = 0x08000000
 
+# ファイルリストの対象 / 対象外マーク
+MARK_INCLUDE = '☑'
+MARK_EXCLUDE = '☐'
+
 
 # ============================================================
 # 設定ファイル
@@ -75,13 +79,16 @@ STRINGS = {
         'dlg_browse':             'BMDファイルが入ったフォルダを選択',
         # ファイル一覧枠
         'frm_files':              '検出されたBMDファイル',
-        'lbl_count':              '{n} 個のBMDファイルを検出',
+        'col_state':              '対象',
+        'col_file':               'ファイル名',
+        'lbl_count':              '{n} 個のBMDファイルを検出（対象外: {e} 個）',
         # 設定枠
         'frm_settings':           '設定',
         'lbl_variants':           'バリアント数:',
         'lbl_seed':               'シード値:',
         'chk_hide_cmd':           'CMDを非表示',
-        'chk_select_one':         '出力結果を一つずつ選択',
+        'chk_select_one':         '出力を一つずつ選択',
+        'chk_make_szs':           '結果からszsファイルを作成',
         # スケール範囲枠
         'frm_scale_ranges':       'スケール範囲設定',
         'lbl_scale_min':          '最小',
@@ -137,6 +144,10 @@ STRINGS = {
         'w_step3':                '  [3] BMD変換中...',
         'w_step3_ok':             '  完了: {ok}/{total} バリアント -> {path}',
         'w_step3_ok_select':      '  完了: 1/{total} バリアントを選択 -> {path}',
+        'w_excluded_copy':        '  [除外ファイル] {n} 個を変換なしでコピー',
+        'w_szs_start':            '\n[SZS] selected/ フォルダをSZSにパック中...',
+        'w_szs_ok':               '  SZS出力完了: {path}',
+        'w_szs_err':              '  エラー: SZSの作成に失敗しました',
         'w_exception':            '  例外: {e}',
         'w_all_done':             '\n全ファイルの処理が完了しました。',
         'w_status':               '処理中 ({idx}/{total}): {name}',
@@ -153,13 +164,16 @@ STRINGS = {
         'dlg_browse':             'Select a folder containing BMD files',
         # File list frame
         'frm_files':              'Detected BMD Files',
-        'lbl_count':              '{n} BMD file(s) found',
+        'col_state':              'Include',
+        'col_file':               'File',
+        'lbl_count':              '{n} BMD file(s) found  ({e} excluded)',
         # Settings frame
         'frm_settings':           'Settings',
         'lbl_variants':           'Variants:',
         'lbl_seed':               'Seed:',
         'chk_hide_cmd':           'Hide CMD window',
         'chk_select_one':         'Select one output per type',
+        'chk_make_szs':           'Create SZS from results',
         # Scale ranges frame
         'frm_scale_ranges':       'Scale Ranges',
         'lbl_scale_min':          'Min',
@@ -215,6 +229,10 @@ STRINGS = {
         'w_step3':                '  [3] Converting to BMD...',
         'w_step3_ok':             '  Done: {ok}/{total} variants -> {path}',
         'w_step3_ok_select':      '  Done: 1/{total} variant selected -> {path}',
+        'w_excluded_copy':        '  [Excluded] Copying {n} file(s) as-is (no conversion)',
+        'w_szs_start':            '\n[SZS] Packing selected/ folder into SZS...',
+        'w_szs_ok':               '  SZS created: {path}',
+        'w_szs_err':              '  Error: SZS creation failed',
         'w_exception':            '  Exception: {e}',
         'w_all_done':             '\nAll files converted.',
         'w_status':               'Processing ({idx}/{total}): {name}',
@@ -426,8 +444,8 @@ MSG_DONE    = 'done'
 MSG_ERROR   = 'error'
 
 
-def conversion_worker(bmd_files, input_dir, num_variants, seed, hide_cmd, scale_ranges,
-                      select_one, S, q, hocotate_exe):
+def conversion_worker(bmd_files, excluded_files, input_dir, num_variants, seed, hide_cmd,
+                      scale_ranges, select_one, make_szs, S, q, hocotate_exe):
     sub_kwargs = dict(capture_output=True, text=True)
     if hide_cmd and sys.platform == 'win32':
         sub_kwargs['creationflags'] = CREATE_NO_WINDOW
@@ -437,8 +455,20 @@ def conversion_worker(bmd_files, input_dir, num_variants, seed, hide_cmd, scale_
     variants_root = os.path.join(input_dir, 'variants')
     selected_root = os.path.join(input_dir, 'selected')
 
-    if select_one:
+    # select_one または make_szs のとき selected/ を使用
+    do_select = select_one or make_szs
+    if do_select:
         os.makedirs(selected_root, exist_ok=True)
+
+    # ---- 対象外ファイルをコピー（変換なし） ----
+    if excluded_files:
+        q.put((MSG_LOG, S['w_excluded_copy'].format(n=len(excluded_files))))
+        copy_dest = selected_root if do_select else variants_root
+        os.makedirs(copy_dest, exist_ok=True)
+        for bmd_name in excluded_files:
+            src = os.path.join(input_dir, bmd_name)
+            if os.path.isfile(src):
+                shutil.copy2(src, os.path.join(copy_dest, bmd_name))
 
     for idx, bmd_name in enumerate(bmd_files):
         base     = os.path.splitext(bmd_name)[0]
@@ -452,7 +482,7 @@ def conversion_worker(bmd_files, input_dir, num_variants, seed, hide_cmd, scale_
         workdir = tempfile.mkdtemp(prefix=f'bmdvar_{base}_')
 
         try:
-            if not select_one:
+            if not do_select:
                 os.makedirs(out_dir, exist_ok=True)
             shutil.copy2(bmd_path, workdir)
 
@@ -498,7 +528,7 @@ def conversion_worker(bmd_files, input_dir, num_variants, seed, hide_cmd, scale_
             q.put((MSG_LOG, S['w_step3']))
             ok = 0
 
-            if select_one:
+            if do_select:
                 # 生成したDAEの中からランダムに1つ選んでBMD変換し selected/ へ出力
                 available = [
                     os.path.join(var_work, f'{base}_var{i:02d}.dae')
@@ -555,6 +585,24 @@ def conversion_worker(bmd_files, input_dir, num_variants, seed, hide_cmd, scale_
 
         q.put((MSG_OVERALL, int((idx + 1) / total * 100)))
 
+    # ---- SZS パック (make_szs モード) ----
+    if make_szs and os.path.isdir(selected_root):
+        q.put((MSG_LOG, S['w_szs_start']))
+        folder_name = os.path.basename(input_dir.rstrip('/\\'))
+        parent_dir  = os.path.dirname(input_dir.rstrip('/\\'))
+        szs_output  = os.path.join(parent_dir, folder_name + '.szs')
+        try:
+            subprocess.run(
+                [hocotate_exe, '--szs', selected_root, szs_output],
+                **sub_kwargs)
+            if os.path.isfile(szs_output):
+                q.put((MSG_LOG, S['w_szs_ok'].format(path=szs_output)))
+            else:
+                q.put((MSG_LOG, S['w_szs_err']))
+        except Exception as e:
+            q.put((MSG_LOG, S['w_szs_err']))
+            q.put((MSG_LOG, f'  {e}'))
+
     q.put((MSG_FILE,   100))
     q.put((MSG_STATUS, S['status_done']))
     q.put((MSG_LOG,    S['w_all_done']))
@@ -581,6 +629,8 @@ class App(tk.Tk):
         self._current_count = 0
         self._running       = False
         self._q             = queue.Queue()
+        self._bmd_list      = []
+        self._excluded_files = set()
 
         # 設定ファイルを先に読み込んで言語を確定する
         # （Hocotate 未検出ダイアログより前に言語を反映させるため）
@@ -613,6 +663,7 @@ class App(tk.Tk):
             'seed':          self._var_seed.get(),
             'hide_cmd':      self._var_hide_cmd.get(),
             'select_one':    self._var_select_one.get(),
+            'make_szs':      self._var_make_szs.get(),
             'scale_ranges':  scale_ranges,
         })
 
@@ -629,6 +680,8 @@ class App(tk.Tk):
             self._var_hide_cmd.set(bool(cfg['hide_cmd']))
         if 'select_one' in cfg:
             self._var_select_one.set(bool(cfg['select_one']))
+        if 'make_szs' in cfg:
+            self._var_make_szs.set(bool(cfg['make_szs']))
         if 'scale_ranges' in cfg:
             sr = cfg['scale_ranges']
             # 旧バージョンの left_leg/right_leg/left_arm/right_arm キーを移行
@@ -787,11 +840,22 @@ class App(tk.Tk):
         self._frm_files.pack(fill='both', expand=True, padx=4, pady=4)
 
         sb = ttk.Scrollbar(self._frm_files, orient='vertical')
-        self._listbox = tk.Listbox(
-            self._frm_files, height=6, yscrollcommand=sb.set,
-            activestyle='none', selectbackground='#cde8ff')
-        sb.config(command=self._listbox.yview)
-        self._listbox.pack(side='left', fill='both', expand=True)
+        self._tree = ttk.Treeview(
+            self._frm_files,
+            columns=('state', 'file'),
+            show='headings',
+            height=6,
+            yscrollcommand=sb.set,
+            selectmode='browse',
+        )
+        self._tree.heading('state', text='')
+        self._tree.heading('file',  text='')
+        self._tree.column('state', width=38, stretch=False, anchor='center')
+        self._tree.column('file',  stretch=True, anchor='w', minwidth=120)
+        self._tree.tag_configure('excluded', foreground='gray')
+        self._tree.bind('<ButtonRelease-1>', self._on_tree_click)
+        sb.config(command=self._tree.yview)
+        self._tree.pack(side='left', fill='both', expand=True)
         sb.pack(side='right', fill='y')
 
         self._lbl_count = ttk.Label(self._frm_files, text='')
@@ -818,14 +882,30 @@ class App(tk.Tk):
         self._var_hide_cmd = tk.BooleanVar(value=True)
         self._chk_hide_cmd = ttk.Checkbutton(
             self._frm_cfg, text='', variable=self._var_hide_cmd)
-        self._chk_hide_cmd.grid(row=1, column=0, columnspan=4,
+        self._chk_hide_cmd.grid(row=1, column=0, columnspan=2,
                                 sticky='w', pady=(6, 0))
 
         self._var_select_one = tk.BooleanVar(value=False)
         self._chk_select_one = ttk.Checkbutton(
             self._frm_cfg, text='', variable=self._var_select_one)
-        self._chk_select_one.grid(row=2, column=0, columnspan=4,
-                                  sticky='w', pady=(2, 0))
+        self._chk_select_one.grid(row=1, column=2, columnspan=2,
+                                  sticky='w', pady=(6, 0))
+
+        self._var_make_szs = tk.BooleanVar(value=False)
+        self._chk_make_szs = ttk.Checkbutton(
+            self._frm_cfg, text='', variable=self._var_make_szs,
+            state='disabled')
+        self._chk_make_szs.grid(row=2, column=0, columnspan=4,
+                                sticky='w', pady=(2, 0))
+
+        # select_one の ON/OFF に連動して make_szs チェックを有効/無効化
+        def _on_select_one_changed(*_):
+            if self._var_select_one.get():
+                self._chk_make_szs.config(state='normal')
+            else:
+                self._var_make_szs.set(False)
+                self._chk_make_szs.config(state='disabled')
+        self._var_select_one.trace_add('write', _on_select_one_changed)
 
         # ---- 実行ボタン ----
         self._btn_run = ttk.Button(tab, text='', width=16, command=self._start)
@@ -928,12 +1008,15 @@ class App(tk.Tk):
         self._frm_folder.config(text=t('frm_folder'))
         self._btn_browse.config(text=t('btn_browse'))
         self._frm_files.config(text=t('frm_files'))
-        self._lbl_count.config(text=t('lbl_count', n=self._current_count))
+        self._tree.heading('state', text=t('col_state'))
+        self._tree.heading('file',  text=t('col_file'))
+        self._update_count_label()
         self._frm_cfg.config(text=t('frm_settings'))
         self._lbl_variants.config(text=t('lbl_variants'))
         self._lbl_seed.config(text=t('lbl_seed'))
         self._chk_hide_cmd.config(text=t('chk_hide_cmd'))
         self._chk_select_one.config(text=t('chk_select_one'))
+        self._chk_make_szs.config(text=t('chk_make_szs'))
         self._btn_run.config(text=t('btn_run'))
         self._frm_prog.config(text=t('frm_progress'))
         self._lbl_overall_hdr.config(text=t('lbl_overall'))
@@ -957,6 +1040,32 @@ class App(tk.Tk):
         self._save_settings()
 
     # ----------------------------------------------------------
+    # ファイルリスト — クリックで対象外トグル
+    # ----------------------------------------------------------
+    def _on_tree_click(self, event):
+        row = self._tree.identify_row(event.y)
+        if not row:
+            return
+        vals = self._tree.item(row, 'values')
+        if not vals:
+            return
+        fname = vals[1]
+        if fname in self._excluded_files:
+            self._excluded_files.discard(fname)
+            self._tree.set(row, 'state', MARK_INCLUDE)
+            self._tree.item(row, tags=())
+        else:
+            self._excluded_files.add(fname)
+            self._tree.set(row, 'state', MARK_EXCLUDE)
+            self._tree.item(row, tags=('excluded',))
+        self._update_count_label()
+
+    def _update_count_label(self):
+        n = len(self._bmd_list)
+        e = len(self._excluded_files)
+        self._lbl_count.config(text=self._t('lbl_count', n=n, e=e))
+
+    # ----------------------------------------------------------
     # Hocotate_Toolkit.exe パス指定
     # ----------------------------------------------------------
     def _browse_hocotate(self):
@@ -977,12 +1086,13 @@ class App(tk.Tk):
         if not folder:
             return
         self._var_folder.set(folder)
-        files = sorted(f for f in os.listdir(folder) if f.lower().endswith('.bmd'))
-        self._listbox.delete(0, 'end')
-        for f in files:
-            self._listbox.insert('end', f)
-        self._current_count = len(files)
-        self._lbl_count.config(text=self._t('lbl_count', n=self._current_count))
+        self._bmd_list = sorted(f for f in os.listdir(folder) if f.lower().endswith('.bmd'))
+        self._excluded_files = set()
+        self._tree.delete(*self._tree.get_children())
+        for f in self._bmd_list:
+            self._tree.insert('', 'end', values=(MARK_INCLUDE, f))
+        self._current_count = len(self._bmd_list)
+        self._update_count_label()
 
     # ----------------------------------------------------------
     # スケール範囲を取得（min > max の場合は自動入れ替え）
@@ -1012,10 +1122,12 @@ class App(tk.Tk):
             messagebox.showerror(self._t('dlg_err_title'), self._t('err_no_folder'))
             return
 
-        bmd_files = sorted(f for f in os.listdir(folder) if f.lower().endswith('.bmd'))
-        if not bmd_files:
+        if not self._bmd_list:
             messagebox.showwarning(self._t('dlg_err_title'), self._t('err_no_bmd'))
             return
+
+        excluded_files = [f for f in self._bmd_list if f in self._excluded_files]
+        bmd_files      = [f for f in self._bmd_list if f not in self._excluded_files]
 
         S = STRINGS[self._current_lang]
         scale_ranges = self._get_scale_ranges()
@@ -1030,7 +1142,7 @@ class App(tk.Tk):
 
         self._log_append('\n' + S['w_sep'])
         self._log_append(S['w_folder'].format(v=folder))
-        self._log_append(S['w_count'].format(v=len(bmd_files)))
+        self._log_append(S['w_count'].format(v=len(self._bmd_list)))
         self._log_append(S['w_params'].format(
             num=self._var_num.get(), seed=self._var_seed.get()))
         self._log_append(S['w_sep'])
@@ -1040,10 +1152,10 @@ class App(tk.Tk):
         self._q = queue.Queue()
         threading.Thread(
             target=conversion_worker,
-            args=(bmd_files, folder,
+            args=(bmd_files, excluded_files, folder,
                   self._var_num.get(), self._var_seed.get(),
                   self._var_hide_cmd.get(), scale_ranges,
-                  self._var_select_one.get(), S, self._q,
+                  self._var_select_one.get(), self._var_make_szs.get(), S, self._q,
                   self._var_hocotate_path.get().strip()),
             daemon=True
         ).start()
