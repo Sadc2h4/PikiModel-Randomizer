@@ -3,9 +3,12 @@
 ![Python](https://img.shields.io/badge/language-Python%203.10-3776AB?style=flat-square&logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/platform-Windows-0078D4?style=flat-square&logo=windows&logoColor=white)
 
+<img width="800" height="450" alt="Piki_model_Rondomizer" src="https://github.com/user-attachments/assets/a98f56fb-00f3-4034-83b4-974128084ce6" />
+
+
 ## Download
 
-<a href="https://github.com/Sadc2h4/PikiModel-Randomizer/releases/tag/v1.1a">
+<a href="https://github.com/Sadc2h4/PikiModel-Randomizer/releases/tag/v1.1b">
   <img
     src="https://raw.githubusercontent.com/Sadc2h4/brand-assets/main/button/Download_Button_1.png"
     alt="Download .zip"
@@ -13,7 +16,7 @@
   />
 </a>
 <br>
-<a href="https://uu.getuploader.com/freehack/download/200">
+<a href="https://www.dropbox.com/scl/fi/284x9ajr8exof95finz7c/PikiModel_Randomizer_v1.1b.zip?rlkey=sra5izhv1lu0o8v5s6kj08jem&st=mzlp1oxy&dl=0">
   <img
     src="https://raw.githubusercontent.com/Sadc2h4/brand-assets/main/button/Download_Button_3.png"
     alt="Download .zip"
