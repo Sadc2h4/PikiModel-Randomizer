@@ -1,0 +1,25 @@
+◆ 表示アプリ名
+PikiModel-Randomizer
+
+◆ カテゴリ
+Pikmin Hack
+
+◆ 概要
+This application is a GUI tool for batch-generating scale variants of Pikmin 2 character models (BMD files).
+Scale ranges can be configured individually for each body part
+head, leaf, body, legs, arms, and eyes.
+
+◆ 詳細
+本アプリケーションはPikmin 2で使用されるキャラクターモデル（BMDファイル）のスケールをランダムに変化させたバリアントを一括生成するGUIツールです．
+頭・葉・体・脚・腕・目といった部位ごとにスケールの変動範囲を細かく設定でき，シード値を指定することで再現性のある結果を得ることができます．
+変換処理には外部ツール Hocotate Toolkit を使用します． 普段見慣れたキャラクターモデルもこのアプリケーションでランダマイズすると違った雰囲気を楽しめるかもしれません。
+
+◆ 主な機能
+・BMDデータのランダム編集
+・派生パターン作成
+
+◆ 作成言語
+Python 3.10.8
+
+◆ 動作環境
+Windows10，Windows11
